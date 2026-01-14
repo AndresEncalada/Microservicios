@@ -15,7 +15,7 @@ def calcular_envio(solicitud: SolicitudEnvio):
     cantidad = len(solicitud.productos)
     
     # Tarifas simuladas
-    if solicitud.destino.lower() == "quito":
+    if solicitud.destino.lower() == "cuenca":
         costo_unitario = 1.50
     else:
         costo_unitario = 3.00 # Más caro fuera de la ciudad
