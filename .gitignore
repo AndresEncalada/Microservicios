@@ -1,0 +1,13 @@
+# Archivos de compilación Java
+target/
+*.class
+*.jar
+
+# Configuración de IDEs
+.idea/
+*.iml
+.vscode/
+
+# Logs y temporales
+*.log
+.DS_Store

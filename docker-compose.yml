@@ -1,44 +1,88 @@
 version: '3.8'
 
 services:
-  # 1. Base de Datos (MySQL)
+  # 1. Base de Datos Postgres (Para Productos)
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_DB: productdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    #ports:
+    # - "5432:5432"
+    networks:
+      - microservices-net
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. Base de Datos MySQL (Para Órdenes)
   mysql-db:
     image: mysql:8.0
     container_name: mysql-db
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: ordenes_db
-    ports:
-      - "3306:3306"
+    #ports:
+    #  - "3307:3306"
     networks:
-      - mi-red
-
-  # 2. Tu Microservicio Python (Calculadora)
-  ms-python:
-    build: ./Calculadora_de_Envios  # Busca el Dockerfile en tu carpeta de Python
-    container_name: ms-python
-    ports:
-      - "8082:8082" # Puerto interno 8082 
-    networks:
-      - mi-red
-
-  # 3. Tu Microservicio Java (Gestión de Órdenes)
-  ms-ordenes:
-    image: payara/micro:6.2023.11-jdk17
-    container_name: ms-ordenes
-    ports:
-      - "8083:8083" # Puerto interno 8083
+      - microservices-net
     volumes:
-      # Inyectamos el .war generado por Maven dentro del contenedor
-      - ./Gestion_de_Ordenes/target/Gestion_de_Ordenes.war:/opt/payara/deployments/ROOT.war
+      - mysql_data:/var/lib/mysql 
+
+
+  # 3. Microservicio 1: Catálogo (Spring Boot)
+  product-service:
+    build: ./product-service
+    container_name: product-service
+    #ports:
+    #  - "8081:8081"
+    depends_on:
+      - postgres-db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/productdb
+    networks:
+      - microservices-net
+
+  # 4. Microservicio 2: Calculadora (Python)
+  ms-python:
+    build: ./Calculadora_de_Envios
+    container_name: ms-python
+    #ports:
+    #  - "8082:8082"
+    networks:
+      - microservices-net
+
+# 5. Microservicio 3: Gestión de Órdenes (Jakarta EE / Payara)
+  ms-ordenes:
+    build: ./Gestion_de_Ordenes  # <--- CAMBIO: Ahora construimos la imagen
+    container_name: ms-ordenes
+    #ports:
+    #  - "8083:8083"
     depends_on:
       - mysql-db
       - ms-python
-    command: --deploy /opt/payara/deployments/ROOT.war --port 8083
+      - product-service
     networks:
-      - mi-red
+      - microservices-net
 
-# Red compartida para que se vean entre ellos por nombre
+  # 6. API Gateway (Nginx - TUYO)
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:80"
+    depends_on:
+      - product-service
+      - ms-python
+      - ms-ordenes
+    networks:
+      - microservices-net
+
 networks:
-  mi-red:
+  microservices-net:
     driver: bridge
+
+volumes:
+  postgres_data:
+  mysql_data: # Nuevo volumen para no perder datos de MySQL
