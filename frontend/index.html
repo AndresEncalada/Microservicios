@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tienda de Microservicios</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .product-card {
+            transition: transform 0.2s;
+        }
+
+        .product-card:hover {
+            transform: scale(1.05);
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-primary mb-5">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">📦 Arquitectura de Microservicios</span>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2 class="mb-4 text-center">Catálogo de Productos</h2>
+
+        <div id="alert-container"></div>
+
+        <div class="row" id="products-container">
+            <div class="col-12 text-center">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p>Cargando productos desde el Microservicio...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="buyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Compra</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h4 id="modal-prod-name" class="text-primary"></h4>
+                    <p>Precio unitario: $<span id="modal-prod-price"></span></p>
+                    <div class="mb-3">
+                        <label class="form-label">Cantidad a comprar:</label>
+                        <input type="number" class="form-control" id="modal-quantity" value="1" min="1">
+                        <input type="hidden" id="modal-prod-id">
+                    </div>
+                    <div class="alert alert-info small">
+                        ℹ️ Al comprar, se enviará una petición al <strong>Microservicio de Órdenes</strong> (Java EE),
+                        el cual se comunicará internamente con el de <strong>Productos</strong> para reducir el stock.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success" onclick="placeOrder()">Confirmar Pedido</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // RUTAS DEL API GATEWAY
+        const API_PRODUCTS = '/api/products';
+        const API_ORDERS = '/api/orders';
+
+        document.addEventListener("DOMContentLoaded", loadProducts);
+
+        // 1. Cargar Productos (GET)
+        async function loadProducts() {
+            try {
+                const response = await fetch(API_PRODUCTS);
+                if (!response.ok) throw new Error("Error de conexión con el Gateway");
+                const products = await response.json();
+                renderProducts(products);
+            } catch (error) {
+                document.getElementById('products-container').innerHTML =
+                    `<div class="alert alert-danger text-center">
+                    ❌ No se pudo conectar con el servicio de Productos.<br>
+                    <small>${error.message}</small>
+                 </div>`;
+            }
+        }
+
+        function renderProducts(products) {
+            const container = document.getElementById('products-container');
+            container.innerHTML = '';
+
+            if (products.length === 0) {
+                container.innerHTML = '<div class="alert alert-warning">No hay productos en inventario.</div>';
+                return;
+            }
+
+            products.forEach(p => {
+                const card = `
+                <div class="col-md-4 mb-4">
+                    <div class="card product-card shadow-sm h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">${p.nombre}</h5>
+                            <h3 class="text-primary">$${p.precio}</h3>
+                            <p class="card-text">Stock: <span class="badge bg-${p.stock > 0 ? 'success' : 'danger'}">${p.stock}</span></p>
+                            <button class="btn btn-outline-primary w-100" 
+                                onclick="openModal(${p.id}, '${p.nombre}', ${p.precio})"
+                                ${p.stock === 0 ? 'disabled' : ''}>
+                                ${p.stock > 0 ? 'Comprar' : 'Agotado'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+                container.innerHTML += card;
+            });
+        }
+
+        // 2. Abrir Modal
+        let buyModal;
+        function openModal(id, name, price) {
+            document.getElementById('modal-prod-id').value = id;
+            document.getElementById('modal-prod-name').innerText = name;
+            document.getElementById('modal-prod-price').innerText = price;
+            buyModal = new bootstrap.Modal(document.getElementById('buyModal'));
+            buyModal.show();
+        }
+
+        // 3. Crear Orden (POST)
+        async function placeOrder() {
+        const id = parseInt(document.getElementById('modal-prod-id').value);
+        const qty = parseInt(document.getElementById('modal-quantity').value); // Aquí leemos el 5
+        const alertBox = document.getElementById('alert-container');
+
+        // TRUCO: Creamos un array con el ID repetido 'qty' veces
+        // Si qty es 3, esto genera: [1, 1, 1]
+        const productosArray = Array(qty).fill(id);
+
+        const orderData = {
+            cliente: "Usuario Web",
+            productos: productosArray // Enviamos la lista repetida
+        };
+
+            try {
+                const response = await fetch(API_ORDERS, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderData)
+                });
+
+                if (response.ok) {
+                    alertBox.innerHTML = `<div class="alert alert-success alert-dismissible fade show">✅ ¡Orden creada con éxito! El stock ha sido actualizado. <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+                    buyModal.hide();
+                    loadProducts(); // Recargar para ver el stock bajar
+                } else {
+                    const msg = await response.text();
+                    alert("Error al procesar orden: " + msg);
+                }
+            } catch (error) {
+                alert("Error de red: " + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

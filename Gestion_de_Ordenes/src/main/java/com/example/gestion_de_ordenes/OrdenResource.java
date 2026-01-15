@@ -25,8 +25,8 @@ public class OrdenResource {
     private EntityManager em;
 
     // URLS de los otros microservicios (¡OJO: Cambiar esto para Docker!)
-    private final String URL_MS_PYTHON = "http://localhost:8082/calcular-envio";
-    private final String URL_MS_SPRING = "http://localhost:8081/productos";
+    private final String URL_MS_PYTHON = "http://ms-python:8082/calcular-envio";
+    private final String URL_MS_SPRING = "http://product-service:8081/productos";
 
     @POST
     @Transactional // Importante para que guarde en la BD
@@ -47,7 +47,7 @@ public class OrdenResource {
             try {
                 // Asumimos que tu compañero tiene un endpoint POST o PUT para descontar stock
                 // Ej: POST http://ms-spring:8081/productos/1/reducir-stock
-                String urlProducto = URL_MS_SPRING + "/" + prodId + "/reducir-stock";
+                String urlProducto = URL_MS_SPRING + "/" + prodId + "/reduce-stock?quantity=1";
 
                 // Hacemos la llamada
                 Response respSpring = client.target(urlProducto)

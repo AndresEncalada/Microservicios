@@ -1,0 +1,20 @@
+# Script para insertar datos masivos vía Gateway (USANDO POWERSHELL)
+$gateway = "http://localhost:8080/api/products"
+
+$productos = @(
+    @{ nombre = "iPhone 15"; precio = 999.99; stock = 10 },
+    @{ nombre = "Samsung S24"; precio = 899.50; stock = 15 },
+    @{ nombre = "Audífonos Sony"; precio = 150.00; stock = 30 },
+    @{ nombre = "Cargador Rápido"; precio = 20.00; stock = 100 },
+    @{ nombre = "Case Protector"; precio = 15.00; stock = 50 }
+)
+
+foreach ($prod in $productos) {
+    try {
+        $json = $prod | ConvertTo-Json
+        $response = Invoke-RestMethod -Method Post -Uri $gateway -Body $json -ContentType "application/json"
+        Write-Host " Insertado: $($prod.nombre)" -ForegroundColor Green
+    } catch {
+        Write-Host " Error insertando $($prod.nombre): $_" -ForegroundColor Red
+    }
+}

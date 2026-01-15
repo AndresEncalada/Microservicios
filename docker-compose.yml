@@ -78,7 +78,12 @@ services:
       - ms-ordenes
     networks:
       - microservices-net
-
+  # 7. Frontend Service (Web Estática)
+  frontend-service:
+    build: ./frontend
+    container_name: frontend-service
+    networks:
+      - microservices-net
 networks:
   microservices-net:
     driver: bridge
