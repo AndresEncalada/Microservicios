@@ -15,6 +15,9 @@ public class Orden implements Serializable {
     // o podrías crear una tabla detalle, pero para este lab, simplifiquemos:
     private String productoIds;
 
+    // Nombres de producto(s) asociados a la orden (ej: "Camiseta", "Camiseta, Pantalón")
+    private String nombre;
+
     private String destino;
     private Double total;
 
@@ -32,6 +35,9 @@ public class Orden implements Serializable {
 
     public String getProductoIds() { return productoIds; }
     public void setProductoIds(String productoIds) { this.productoIds = productoIds; }
+
+    public String getNombre() { return nombre; }
+    public void setNombre(String nombre) { this.nombre = nombre; }
 
     public String getDestino() { return destino; }
     public void setDestino(String destino) { this.destino = destino; }

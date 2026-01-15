@@ -37,6 +37,15 @@
                 <p>Cargando productos desde el Microservicio...</p>
             </div>
         </div>
+
+        <hr class="my-5">
+
+        <h2 class="mb-3 text-center">Órdenes realizadas</h2>
+        <div class="row" id="orders-container">
+            <div class="col-12 text-center text-muted">
+                No se han cargado órdenes todavía.
+            </div>
+        </div>
     </div>
 
     <div class="modal fade" id="buyModal" tabindex="-1">
@@ -54,8 +63,12 @@
                         <input type="number" class="form-control" id="modal-quantity" value="1" min="1">
                         <input type="hidden" id="modal-prod-id">
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ciudad de envío:</label>
+                        <input type="text" class="form-control" id="modal-city" placeholder="Ingrese su ciudad">
+                    </div>
                     <div class="alert alert-info small">
-                        ℹ️ Al comprar, se enviará una petición al <strong>Microservicio de Órdenes</strong> (Java EE),
+                        Al comprar, se enviará una petición al <strong>Microservicio de Órdenes</strong> (Java EE),
                         el cual se comunicará internamente con el de <strong>Productos</strong> para reducir el stock.
                     </div>
                 </div>
@@ -73,7 +86,10 @@
         const API_PRODUCTS = '/api/products';
         const API_ORDERS = '/api/orders';
 
-        document.addEventListener("DOMContentLoaded", loadProducts);
+        document.addEventListener("DOMContentLoaded", () => {
+            loadProducts();
+            loadOrders();
+        });
 
         // 1. Cargar Productos (GET)
         async function loadProducts() {
@@ -121,6 +137,54 @@
             });
         }
 
+        async function loadOrders() {
+            const container = document.getElementById('orders-container');
+            try {
+                const resp = await fetch(API_ORDERS);
+                if (!resp.ok) {
+                    throw new Error('HTTP ' + resp.status);
+                }
+                const orders = await resp.json();
+                renderOrders(orders);
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            ❌ No se pudieron cargar las órdenes.<br>
+                            <small>${error.message}</small>
+                        </div>
+                    </div>`;
+            }
+        }
+
+        function renderOrders(orders) {
+            const container = document.getElementById('orders-container');
+            container.innerHTML = '';
+
+            if (!orders || orders.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-info">Aún no hay órdenes registradas.</div>
+                    </div>`;
+                return;
+            }
+
+            orders.forEach(o => {
+                const card = `
+                    <div class="col-12 mb-2">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-1 text-muted">Orden #${o.id}</h6>
+                                <p class="mb-1"><strong>Producto:</strong> ${o.nombre}</p>
+                                <p class="mb-1"><strong>Destino:</strong> ${o.destino}</p>
+                                <p class="mb-0"><strong>Total:</strong> $${o.total}</p>
+                            </div>
+                        </div>
+                    </div>`;
+                container.innerHTML += card;
+            });
+        }
+
         // 2. Abrir Modal
         let buyModal;
         function openModal(id, name, price) {
@@ -135,7 +199,13 @@
         async function placeOrder() {
         const id = parseInt(document.getElementById('modal-prod-id').value);
         const qty = parseInt(document.getElementById('modal-quantity').value); // Aquí leemos el 5
+        const city = document.getElementById('modal-city').value.trim();
         const alertBox = document.getElementById('alert-container');
+
+        // Validación simple
+        if (!city) {
+            return alert("Por favor, ingrese una ciudad de envío.");
+        }
 
         // TRUCO: Creamos un array con el ID repetido 'qty' veces
         // Si qty es 3, esto genera: [1, 1, 1]
@@ -144,7 +214,7 @@
         const orderData = {
             cliente: "Usuario Web",
             productos: productosArray, // Enviamos la lista repetida
-            destino: "Quito"
+            destino: city // Usamos la ciudad ingresada
         };
 
             try {
@@ -158,6 +228,7 @@
                     alertBox.innerHTML = `<div class="alert alert-success alert-dismissible fade show">✅ ¡Orden creada con éxito! El stock ha sido actualizado. <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
                     buyModal.hide();
                     loadProducts(); // Recargar para ver el stock bajar
+                    loadOrders();   // Recargar para ver las órdenes actualizadas
                 } else {
                     const msg = await response.text();
                     alert("Error al procesar orden: " + msg);

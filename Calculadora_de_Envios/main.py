@@ -27,7 +27,8 @@ def calcular_envio(solicitud: SolicitudEnvio):
     return {
         "costo_envio": total_envio,
         "moneda": "USD",
-        "mensaje": "Cálculo realizado exitosamente"
+        "mensaje": "Cálculo realizado exitosamente",
+        "total_a_pagar": total_envio 
     }
 
 # Para correrlo localmente si ejecutas el archivo directo
