@@ -15,7 +15,10 @@ import jakarta.ws.rs.core.Response;
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
+
 @Path("/orders")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -24,61 +27,68 @@ public class OrdenResource {
     @PersistenceContext
     private EntityManager em;
 
-    // URLS de los otros microservicios (¡OJO: Cambiar esto para Docker!)
+    // CONFIGURACIÓN DE URLS 
     private final String URL_MS_PYTHON = "http://ms-python:8082/calcular-envio";
-    private final String URL_MS_SPRING = "http://product-service:8081/productos";
+    private final String URL_MS_SPRING = "http://product-service:8081/api/products";
 
     @POST
-    @Transactional // Importante para que guarde en la BD
+    @Transactional
     public Response crearOrden(OrdenRequest request) {
 
-        System.out.println("--- Iniciando Orquestación de Orden ---");
+        System.out.println("--- Iniciando Orden Inteligente ---");
 
         Client client = ClientBuilder.newClient();
         double subtotal = 0.0;
 
-        // ----------------------------------------------------------------
-        // PASO 1: Procesar Productos (Llamada a Spring Boot - MS1)
-        // ----------------------------------------------------------------
-        // Iteramos los IDs que nos mandó el frontend para pedirle al MS1 que descuente stock
-        // y nos dé el precio real.
+        // PASO 0: Agrupar productos (Lógica de Atomicidad)
+        // Convertimos [1, 1, 1] en -> {ID: 1, Cantidad: 3}
+        Map<Long, Integer> conteoProductos = new HashMap<>();
+        for (Long id : request.getProductos()) {
+            conteoProductos.put(id, conteoProductos.getOrDefault(id, 0) + 1);
+        }
 
-        for (Long prodId : request.getProductos()) {
+        // PASO 1: Llamar a Spring Boot (Una vez por cada producto distinto)
+        for (Map.Entry<Long, Integer> entry : conteoProductos.entrySet()) {
+            Long prodId = entry.getKey();
+            int cantidadTotal = entry.getValue(); // Aquí ya pedimos el total (ej: 10)
+
             try {
-                // Asumimos que tu compañero tiene un endpoint POST o PUT para descontar stock
-                // Ej: POST http://ms-spring:8081/productos/1/reducir-stock
-                String urlProducto = URL_MS_SPRING + "/" + prodId + "/reduce-stock?quantity=1";
+                // Pedimos descontar el TOTAL de una sola vez
+                String urlProducto = URL_MS_SPRING + "/" + prodId + "/reduce-stock?quantity=" + cantidadTotal;
 
-                // Hacemos la llamada
+                System.out.println("Solicitando al stock: ID " + prodId + ", Cantidad: " + cantidadTotal);
+
                 Response respSpring = client.target(urlProducto)
                         .request(MediaType.APPLICATION_JSON)
-                        .post(Entity.json("")); // Body vacío o cantidad si fuera necesario
+                        .post(Entity.json(""));
 
                 if (respSpring.getStatus() != 200) {
+                    System.out.println("❌ Stock insuficiente. Spring devolvió: " + respSpring.getStatus());
+                    // Como falló el bloque entero, no se descontó nada. ¡Stock salvado!
                     return Response.status(409)
-                            .entity("Error: Stock insuficiente o producto no encontrado para ID: " + prodId)
+                            .entity("Stock insuficiente para el producto ID: " + prodId)
                             .build();
                 }
 
-                // Leemos el producto actualizado para saber su precio
                 ProductDTO prod = respSpring.readEntity(ProductDTO.class);
-                subtotal += prod.getPrecio();
+                // Sumamos al subtotal: Precio Unitario * Cantidad
+                subtotal += prod.getPrecio() * cantidadTotal;
 
             } catch (Exception e) {
                 e.printStackTrace();
-                return Response.status(500).entity("Error conectando con Microservicio de Productos").build();
+                return Response.status(500).entity("Error interno: " + e.getMessage()).build();
             }
         }
 
-        // ----------------------------------------------------------------
-        // PASO 2: Calcular Envío (Llamada a Python - MS2)
-        // ----------------------------------------------------------------
+        // PASO 2: Llamar a Python (Calculadora)
         double costoEnvio = 0.0;
         try {
-            // Construimos el JSON para Python: {"productos": [1, 2], "destino": "Quito"}
+            // Enviamos el destino real que viene del frontend
+            String destino = request.getDestino() != null ? request.getDestino() : "Quito";
+
             JsonObject jsonPython = Json.createObjectBuilder()
                     .add("productos", Json.createArrayBuilder(request.getProductos()))
-                    .add("destino", request.getDestino())
+                    .add("destino", destino)
                     .build();
 
             Response respPython = client.target(URL_MS_PYTHON)
@@ -86,36 +96,24 @@ public class OrdenResource {
                     .post(Entity.json(jsonPython.toString()));
 
             if (respPython.getStatus() == 200) {
-                // Python responde: {"costo_envio": 5.50}
                 JsonObject jsonResp = respPython.readEntity(JsonObject.class);
-                // getJsonNumber devuelve un tipo complejo, por eso usamos doubleValue()
                 costoEnvio = jsonResp.getJsonNumber("costo_envio").doubleValue();
             }
-
         } catch (Exception e) {
-            e.printStackTrace();
-            // Si falla Python, ¿cancelamos o asumimos costo 0?
-            // Para el lab, mejor fallar para notar el error.
-            return Response.status(500).entity("Error conectando con Calculadora de Envíos").build();
+            System.out.println("Advertencia: Python falló, continuando sin costo de envío.");
         }
 
-        // ----------------------------------------------------------------
-        // PASO 3: Guardar y Responder (Local - MS3)
-        // ----------------------------------------------------------------
-
+        // PASO 3: Guardar Orden
         Orden nuevaOrden = new Orden();
         nuevaOrden.setDestino(request.getDestino());
-        // Guardamos los IDs como string simple para referencia
         nuevaOrden.setProductoIds(request.getProductos().toString());
         nuevaOrden.setTotal(subtotal + costoEnvio);
-
-        // Guardar en MySQL
         em.persist(nuevaOrden);
 
-        client.close(); // Cerramos conexiones HTTP
+        client.close();
 
         return Response.status(201)
-                .entity("Orden creada con ID: " + nuevaOrden.getId() + ". Total: $" + nuevaOrden.getTotal())
+                .entity("¡Orden exitosa! ID: " + nuevaOrden.getId() + ". Total pagado: $" + nuevaOrden.getTotal())
                 .build();
     }
 }
