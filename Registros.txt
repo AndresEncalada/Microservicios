@@ -1,0 +1,18 @@
+#Para revisar registros en las bases de datos
+
+# ORDENES
+
+docker exec -it mysql-db mysql -u root -p
+Contraseña: root
+
+USE ordenes_db;
+SHOW TABLES;
+SELECT * FROM Orden;
+
+
+
+
+# PRODUCTOS 
+
+docker exec -it postgres-db psql -U postgres -d productdb
+SELECT * FROM products;
