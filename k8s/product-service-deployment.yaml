@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+  labels:
+    io.kompose.service: product-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: product-service
+  template:
+    metadata:
+      labels:
+        io.kompose.service: product-service
+    spec:
+      containers:
+        - name: product-service
+          image: product-service
+          env:
+          - name: SPRING_DATASOURCE_URL
+            value: jdbc:postgresql://postgres-db:5432/productdb
+          - name: SPRING_DATASOURCE_USERNAME
+            value: postgres
+          - name: SPRING_DATASOURCE_PASSWORD
+            value: admin
+      restartPolicy: Always

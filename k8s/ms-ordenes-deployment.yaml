@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-ordenes
+  labels:
+    io.kompose.service: ms-ordenes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: ms-ordenes
+  template:
+    metadata:
+      labels:
+        io.kompose.service: ms-ordenes
+    spec:
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              echo "Esperando a MySQL..."
+              until nc -z mysql-db 3306; do
+                echo "MySQL no está listo, esperando 2s..."
+                sleep 2
+              done
+              echo "MySQL listo!"
+      containers:
+        - name: ms-ordenes
+          image: ms-ordenes:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mysql://mysql-db:3306/ordenes_db
+            - name: SPRING_DATASOURCE_USERNAME
+              value: root
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: root
+      restartPolicy: Always
